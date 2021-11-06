@@ -1,0 +1,337 @@
+diff --git a/Build/CMakeLists.txt b/Build/CMakeLists.txt
+index 4f5198b..83dab84 100644
+--- a/Build/CMakeLists.txt
++++ b/Build/CMakeLists.txt
+@@ -135,13 +135,13 @@ if(NOT IOS)
+ endif(NOT IOS)
+ 
+ option(BUILD_PYTHON_BINDINGS "Build python bindings" OFF)
+-option(BUILD_LUA_BINDINGS "Build Lua bindings" OFF)
++option(BUILD_LUA_BINDINGS "Build Lua bindings" ON)
+ 
+ if(APPLE)
+ 	option(BUILD_FRAMEWORK "Build Framework bundle for OSX" OFF)
+ endif()
+ 
+-option(BUILD_SAMPLES "Build samples" OFF)
++option(BUILD_SAMPLES "Build samples" ON)
+ if(WIN32)
+ 	option(SKIP_DIRECTX_SAMPLES "Skip build of all DirectX related samples.  Only applies if BUILD_SAMPLES is ON" OFF)
+ 	option(SKIP_DIRECTX9_SAMPLE "Skip build of DirectX 9 related sample.  Only applies if BUILD_SAMPLES is ON and SKIP_DIRECTX_SAMPLES is OFF" OFF)
+@@ -476,6 +476,8 @@ if(NOT BUILD_FRAMEWORK)
+     	shell 
+     	RocketCore 
+     	RocketControls
++        RocketCoreLua
++        RocketControlsLua
+     	RocketDebugger
+     )
+ else(NOT BUILD_FRAMEWORK)
+diff --git a/Samples/basic/sdl2/src/RenderInterfaceSDL2.cpp b/Samples/basic/sdl2/src/RenderInterfaceSDL2.cpp
+index 9a4a7a6..6c1c860 100644
+--- a/Samples/basic/sdl2/src/RenderInterfaceSDL2.cpp
++++ b/Samples/basic/sdl2/src/RenderInterfaceSDL2.cpp
+@@ -150,6 +150,7 @@ bool RocketSDL2Renderer::LoadTexture(Rocket::Core::TextureHandle& texture_handle
+             texture_handle = (Rocket::Core::TextureHandle) texture;
+             texture_dimensions = Rocket::Core::Vector2i(surface->w, surface->h);
+             SDL_FreeSurface(surface);
++            delete [] buffer; // Avoid leaking..
+         }
+         else
+         {
+diff --git a/Samples/basic/sdl2/src/main.cpp b/Samples/basic/sdl2/src/main.cpp
+index 85a8ba0..670c97c 100644
+--- a/Samples/basic/sdl2/src/main.cpp
++++ b/Samples/basic/sdl2/src/main.cpp
+@@ -26,16 +26,172 @@
+  */
+ 
+ #include <Rocket/Core.h>
++#include <Rocket/Controls.h>
++
+ #include <Rocket/Core/Input.h>
+ #include <Rocket/Debugger/Debugger.h>
+ #include <ShellFileInterface.h>
+-
++#include <Rocket/Core/Lua/Interpreter.h>
++#include <Rocket/Controls/Lua/Controls.h>
+ #include "SystemInterfaceSDL2.h"
+ #include "RenderInterfaceSDL2.h"
+ 
+ #include <SDL.h>
++#include <iostream>
+ 
+ #include <GL/glew.h>
++#include <sys/time.h>
++
++long long getmillis() {
++    struct timeval te; 
++    gettimeofday(&te, NULL); 
++    long long milliseconds = te.tv_sec * 1000LL + te.tv_usec/1000; 
++    return milliseconds;
++}
++
++double frameRate = 1.0 / 60.0;
++
++int setFramerate(lua_State* L)
++{
++    fprintf(stderr, "setFramerate Called\n");
++
++    int n = lua_gettop(L);
++
++    if(n == 1 && lua_isnumber(L, 1)) {
++        double fps = lua_tonumber(L, 1);
++        fprintf(stderr, "Set frameRate %f\n", fps);
++        frameRate = 1.0 / fps;
++    } else {
++       lua_pushstring(L, "incorrect argument");
++       lua_error(L);
++    }
++
++    return 0;
++}
++
++int debugPrint(lua_State *L) 
++{
++    int n = lua_gettop(L);
++    if(n >= 1) {
++        fprintf(stderr, "Debug: %s\n", lua_tostring(L, 1));
++    } else {
++        fprintf(stderr, "Debug: call with no argument!\n");
++    }
++    return 0;
++}
++
++/*
++int createTimer(lua_State* L)
++{
++    fprintf(stderr, "CreateTimer Called\n");
++
++    int n = lua_gettop(L);
++    fprintf(stderr, "%d args\n", n);
++
++    if(n == 2 && lua_isnumber(L, 1) && lua_isstring(L,2)) {
++        fprintf(stderr, "Creating timer\n");
++    } else {
++       lua_pushstring(L, "incorrect argument");
++       lua_error(L);
++    }
++
++
++    lua_pushstring(L, "not implemented"); 
++    return 1;
++}
++*/
++
++class Bridge {
++    public:
++        Bridge() {
++           fprintf(stderr, "Inited.\n");
++        }
++        ~Bridge() {
++
++        }
++
++        bool Activate(lua_State *L) {
++            luaL_dostring(L,"zemuTimer = {} \n" \
++                            "zemuTimer.__index = zemuTimer\n" \
++                            "zemuTimer.Create = function (interval, callback, id) \n " \
++                            " local i = {} \n" \
++                            " setmetatable(i,zemuTimer) \n" \
++                          /*  " print(\"Creating a timer, interval: \" .. interval .. \" callback: \" .. callback .. \" internalId: \" .. id)" \ */
++                            " i._id = id\n" \
++                            " i._interval = interval \n" \
++                            " i._nextTick = sys._lastTick + interval\n" \
++                            " i._callback = callback \n" \
++                            " sys._timers[id] = i\n" \
++                            " return i\n" \
++                            "end \n" \
++                            "" \
++                            "zemuTimer.stop = function (self)\n" \
++                           /* " print(\"stopping timer \" .. self._id)\n" \ */
++                            " sys._timers[self._id] = nil\n"
++                            "end");
++
++            luaL_dostring(L,"sys = sys or {} \n" \
++                            "sys._emulator = true \n" \
++                            "sys._timers = {}\n" \
++                            "sys._lastTick = nil\n" \
++                            "sys._tickTimers = function (stamp) \n" \
++                            " sys._lastTick = stamp\n" \
++                           /* " print(\"ticking timers : \" .. stamp)\n" \ */
++                            "     for k,v in pairs(sys._timers) do\n" \
++                            "       if v and v._nextTick < sys._lastTick then\n" \
++                           /* "         print(\"Timer \" .. v._id .. \" \" .. stamp .. \" > \" .. v._nextTick)\n" \ */
++                            "           if type(v._callback) == \"string\" then\n" \
++                            "               _G[v._callback]()\n" \
++                           /* "               print(\"string callback \" .. v._callback) \n"\ */
++                            "           else\n" \
++                            "               v._callback();\n" \
++                            "           end \n" \
++                            "           v._nextTick = stamp + v._interval\n" \
++                            "       end\n" \
++                            "  end\n" \
++                            "end\n" \
++                            "sys.zenterio_debug = function (s) end \n" \
++                            "sys.new_timer = function (interval, cb) \n" \
++                            "  local id = #sys._timers + 1\n" \
++                            "  return zemuTimer.Create(interval, cb, id)\n" \
++                            "end \n");
++            char initTicks[255];
++
++            long long current = getmillis();
++            sprintf(initTicks, "sys._lastTick = %lld\n", current);
++            luaL_dostring(L,initTicks);
++
++/*
++            "   Utils = {}
++                Utils.__index = Utils
++
++                Utils.Create = function (document)
++                    local i = {}
++                    setmetatable(i, Utils)
++                    i.document = document
++                    i.title = document.title
++                    return i;
++                end" */
++            lua_getglobal(L,"sys");
++            int fca = lua_gettop(L);
++
++            if(lua_isnil(L,fca))
++            {
++                Rocket::Core::Log::Message(Rocket::Core::Log::LT_ERROR, "Error creating bridge in Bridge::Activate");
++                return false;
++            }
++            
++            lua_pushcfunction(L, debugPrint);
++            lua_setfield(L, fca, "zenterio_debug");
++/*
++            lua_pushcfunction(L, setFramerate);
++            lua_setfield(L, fca, "setFramerate");
++*/
++            return true;
++        }
++    private:
++
++};
+ 
+ int main(int argc, char **argv)
+ {
+@@ -53,11 +209,11 @@ int main(int argc, char **argv)
+         DoAllocConsole();
+ #endif
+ 
+-        int window_width = 1024;
+-        int window_height = 768;
++        int window_width = 1280;
++        int window_height = 720;
+ 
+     SDL_Init( SDL_INIT_VIDEO );
+-    SDL_Window * screen = SDL_CreateWindow("LibRocket SDL2 test", 20, 20, window_width, window_height, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
++    SDL_Window * screen = SDL_CreateWindow("", 20, 20, window_width, window_height, SDL_WINDOW_OPENGL);
+     SDL_GLContext glcontext = SDL_GL_CreateContext(screen);
+     int oglIdx = -1;
+     int nRD = SDL_GetNumRenderDrivers();
+@@ -94,37 +250,32 @@ int main(int argc, char **argv)
+ 
+ 	if(!Rocket::Core::Initialise())
+ 		return 1;
++    Rocket::Controls::Initialise();
+ 
+-	Rocket::Core::FontDatabase::LoadFontFace("Delicious-Bold.otf");
+-	Rocket::Core::FontDatabase::LoadFontFace("Delicious-BoldItalic.otf");
+-	Rocket::Core::FontDatabase::LoadFontFace("Delicious-Italic.otf");
+-	Rocket::Core::FontDatabase::LoadFontFace("Delicious-Roman.otf");
++    Rocket::Core::Lua::Interpreter::Initialise();
++    Rocket::Controls::Lua::RegisterTypes(Rocket::Core::Lua::Interpreter::GetLuaState());
++    Bridge *theBridge = new Bridge();
+ 
+-	Rocket::Core::Context *Context = Rocket::Core::CreateContext("default",
++    if(theBridge->Activate(Rocket::Core::Lua::Interpreter::GetLuaState())) {
++        fprintf(stderr, "Bridge activated successfully.\n");
++    }
++
++	Rocket::Core::Context *Context = Rocket::Core::CreateContext("main",
+ 		Rocket::Core::Vector2i(window_width, window_height));
+ 
++    
+ 	Rocket::Debugger::Initialise(Context);
+ 
+-	Rocket::Core::ElementDocument *Document = Context->LoadDocument("demo.rml");
+-
+-	if(Document)
+-	{
+-		Document->Show();
+-		Document->RemoveReference();
+-		fprintf(stdout, "\nDocument loaded");
+-	}
+-	else
+-	{
+-		fprintf(stdout, "\nDocument is NULL");
+-	}
+-
++    SDL_ShowCursor(1); // Always show cursor to allow librockets debug console to be used.
++    
+     bool done = false;
+-
++    Rocket::Core::Lua::Interpreter::LoadFile(Rocket::Core::String("start.lua"));
++    long long timeout = 0;
+ 	while(!done)
+ 	{
+         SDL_Event event;
+ 
+-        SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
++        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+         SDL_RenderClear(renderer);
+ 
+ 		Context->Render();
+@@ -172,6 +323,27 @@ int main(int argc, char **argv)
+                     break;
+             }
+         }
++        long long current = getmillis();
++        if(current >= timeout) {
++            char methodCall[255];
++            timeout = current + 10; // current + (1000.0 * frameRate);
++           // printf("%lld %lld\n",current, timeout);
++
++            lua_State *L = Rocket::Core::Lua::Interpreter::GetLuaState();
++            sprintf(methodCall, "sys._tickTimers(%lld)\n", current);
++            luaL_dostring(L,methodCall);
++
++          /*  lua_getglobal(L , "doTimer");
++            int timer = lua_gettop(L);
++
++            if(!lua_isnil(L,timer))
++            {
++                if (lua_pcall(L, 0, 0, 0) != 0)
++                    fprintf(stderr , "error running function : %s", lua_tostring(L, -1));
++            }
++*/
++        }
++
+ 		Context->Update();
+ 	}
+ 
+diff --git a/Source/Debugger/Plugin.cpp b/Source/Debugger/Plugin.cpp
+index 867f0cd..9e6eccf 100644
+--- a/Source/Debugger/Plugin.cpp
++++ b/Source/Debugger/Plugin.cpp
+@@ -204,7 +204,7 @@ void Plugin::OnShutdown()
+ 	// Release the elements before we leak track, this ensures the debugger hook has been cleared
+ 	// and that we don't try send the messages to the debug log window
+ 	ReleaseElements();
+-
++/*
+ 	if (!elements.empty())
+ 	{
+ 		Core::Log::Message(Core::Log::LT_WARNING, "%u leaked elements detected.", elements.size());
+@@ -213,7 +213,7 @@ void Plugin::OnShutdown()
+ 		for (ElementInstanceMap::iterator i = elements.begin(); i != elements.end(); ++i)
+ 			Core::Log::Message(Core::Log::LT_WARNING, "\t(%d) %s -> %s", count++, (*i)->GetTagName().CString(), (*i)->GetAddress().CString());
+ 	}
+-
++*/
+ 	delete this;
+ }
+ 

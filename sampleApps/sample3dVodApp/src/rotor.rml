@@ -1,0 +1,30 @@
+<rml>
+    <head>
+        <title>Rotor Example</title>
+        <link type="text/css" href="rotor.rcss"/>
+        <script src="utils/utils.lua"></script>
+        <script src="utils/NavigableElement.lua"></script>
+        <script src="utils/array.lua"></script>
+        <script src="utils/Animation.lua"></script>
+        <script src="utils/Animator.lua"></script>
+        <script src="utils/Matrix.lua"></script>
+        <script src="rotor.lua"></script>
+    </head>
+
+    <!-- define "onload" callback to setup the application once loaded -->
+    <body id="base" onload="OnPageLoaded(document)">
+        <wrapper id="rotorscope" style="position: absolute;">
+            <img id="cover1" src="" style="width: 350px; height: 525px; top: 127px; left: 67px; display: block; z-index:0;"/>
+            <img id="cover2" src="" style="width: 350px; height: 525px; top: 132px; left: 72px; display: block; z-index:1;"/>
+            <img id="cover3" src="" style="width: 350px; height: 525px; top: 139px; left: 79px; display: block; z-index:2;"/>
+        </wrapper>
+
+        <div id="buttonFrame" style="left: 0px; top: 0px; display: none;"> 
+            <button id="fpsbutton" style="left: 1000px; top: 20px; width: 150px; height:50px; background-color: rgb(150, 150, 150);">
+                <buttonText id="fpsText" style="position: absolute; color: white; top: 12px; left: 10px; font-weight: bold;">
+                </buttonText>
+            </button>
+        </div>
+    </body>
+</rml>
+

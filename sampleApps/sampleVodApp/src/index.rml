@@ -1,0 +1,103 @@
+<rml>
+    <head>
+        <title>MoviePage Example</title>
+        <link type="text/css" href="moviepage.rcss" />
+        <script src="utils/utils.lua"></script>
+        <script src="utils/NavigableElement.lua"></script>
+        <script src="utils/array.lua"></script>
+        <script src="utils/Animation.lua"></script>
+        <script src="utils/Animator.lua"></script>
+        <script src="moviepage.lua"></script>
+    </head>
+
+    <!-- define "onload" callback to setup the application once loaded -->
+    <body id="base" onload="OnPageLoaded(document)">
+        <wrapper id="playcontainer" style="display:none;">
+            <div style="background-color: #00000055; width: 1280px; height: 720px;"></div>
+            <title id="playbackInfo" style="text-align: center;font-size: 30px; left: 0px; top: 333px;font-weight: bold;">NO PLAYBACK</title>
+            <title style="text-align: center;font-size: 24px; left: 0px; top: 373px;font-weight: bold;">Press "ok" to stop</title>
+        </wrapper>
+        <wrapper id="calibrationScreen" style="display:none;">
+            <title id="startText" style="text-align: center;font-size: 30px; left: 0px; top: 333px;font-weight: bold;">Please wait, initializing.</title>
+        </wrapper>
+        <wrapper id="movieDetails" style="position: absolute;">
+            <!--
+                1280x720
+                   overscan safe area ~ 7.5%
+                     (48px*2=96px h) 1184 x 666 (27px*2=54px v)
+            -->
+            <!-- background image -->
+            <img id="background" src="" style="width: 1280px; height: 720px; top: 0px; left: 0px; display: block;"/>
+
+            <!-- shade the bg image -->
+            <div id="dimmer" style="background-color: #000000b0; width: 1280px; height: 720px;"></div>
+
+            <!-- cover image -->
+            <img id="cover" src="" style="width: 350px; height: 525px; top: 127px; left: 67px; display: block;"/>
+
+            <!-- titles -->
+        
+            <title id="title" style="font-size: 30px; left: 67px; top: 29px;font-weight: bold;">MOVIE TITLE</title>
+            <title id="origin" style="font-size: 17px;left: 67px; top: 67px;">ORIGIN</title>
+
+            <title id="durationTitle" style="font-size: 17px;left: 448px; top: 127px;">Duration</title>
+            <title id="genreTitle" style="font-size: 17px;left: 448px; top: 150px;">Genre</title>
+            <title id="audienceTitle" style="font-size: 17px;left: 448px; top: 173px;">Audience</title>
+            <title id="languagesTitle" style="font-size: 17px;left: 448px; top: 196px;">Languages</title>
+
+            <title id="duration" style="font-size: 17px; left: 550px; top: 127px;">- minutes</title>
+            <title id="genre" style="font-size: 17px; left: 550px; top: 150px;">Unknown</title>
+            <title id="audience" style="font-size: 17px; left: 550px; top: 173px;">Everyone</title>
+            <title id="languages" style="font-size: 17px; left: 550px; top: 196px;">Any</title>
+
+            <img id="scrollUp" src="img/arrow_up.png" style="width: 34px; height: 24px; top: 200px; left: 670px; display: block;"/>
+            <img id="scrollDown" src="img/arrow_down.png" style="width: 34px; height: 24px; top: 660px; left: 670px; display: block;"/>
+
+            <div id="synposis" style="font-size: 20px; font-weight: bold; width: 500px;height: 415px; top: 235px; left: 448px; overflow: hidden; color: rgba(255, 255, 255, 255); white-space: pre-wrap;border-color: rgb(255, 20, 150); border-width: 0px;"></div>
+
+            <title id="availability" style="font-size: 15px; font-weight: bold; width: 150px; left: 1000px; top: 160px;">-</title>
+            <title style="font-size: 15px; font-weight: bold; width: 150px; left: 1000px; top: 651px;">Movie:</title>
+
+            <title id="index" style="font-size: 15px; font-weight: bold; width: 150px; left: 1000px; top: 651px; text-align: right;">1/1</title>
+            <div id="rating" style="top: 655px; left: 67px;">
+                <img id="rating1" src="img/star.png" style="width: 25px; height: 25px; top: 0px; left: 0px; display: block;"/>
+                <img id="rating2" src="img/star.png" style="width: 25px; height: 25px; top: 0px; left: 25px; display: block;"/>
+                <img id="rating3" src="img/star.png" style="width: 25px; height: 25px; top: 0px; left: 50px; display: block;"/>
+                <img id="rating4" src="img/star.png" style="width: 25px; height: 25px; top: 0px; left: 75px; display: block;"/>
+                <img id="rating5" src="img/star.png" style="width: 25px; height: 25px; top: 0px; left: 100px; display: block;"/>
+                <title id="ratingText" style="font-size: 15px; left: 130px; top: 0px;">Any</title>
+            </div>
+            <div id="buttonFrame" style="left: 0px; top: 0px;"> 
+            <!-- play button -->
+                <button id="play" style="left: 1000px; top: 100px; width: 150px; height:50px; background-color: rgb(150, 150, 150);">
+                    <img src="img/play_button.png" style="width: 24px; height: 24px; top: 13px; left: 20px; display: block;"/>
+
+                    <buttonText style="position: absolute; color: white; top: 12px; left: 10px; font-weight: bold;">
+                        Trailer
+                    </buttonText>
+                </button>
+
+                <button id="next" style="left: 1000px; top: 540px; width: 150px; height:50px; background-color: rgb(150, 150, 150);">
+                    <buttonText style="position: absolute; color: white; top: 12px; left: 10px; font-weight: bold;">
+                        Next
+                    </buttonText>
+                </button>
+
+                <button id="previous" style="left: 1000px; top: 600px; width: 150px; height:50px; background-color: rgb(150, 150, 150);">
+                    <buttonText style="position: absolute; color: white; top: 12px; left: 10px; font-weight: bold;">
+                        Previous
+                    </buttonText>
+                </button>
+
+                <button id="fpsbutton" style="left: 1000px; top: 20px; width: 150px; height:50px; background-color: rgb(150, 150, 150);">
+                    <buttonText id="fpsText" style="position: absolute; color: white; top: 12px; left: 10px; font-weight: bold;">
+                    </buttonText>
+                </button>
+            </div>
+        </wrapper>
+        <wrapper id="overlay" style="display:block; z-index:10;">
+            <title id="fpsText" style="text-align: left;font-size: 12px; left: 67px; top: 100px; color:rgb(255,0,0);">Setting up animations</title>
+        </wrapper>
+    </body>
+</rml>
+

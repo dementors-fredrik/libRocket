@@ -1,0 +1,309 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1265\cocoasubrtf210
+{\fonttbl\f0\fswiss\fcharset0 Helvetica;\f1\fnil\fcharset0 Menlo-BoldItalic;\f2\fnil\fcharset0 Menlo-Regular;
+\f3\fnil\fcharset0 Menlo-Bold;}
+{\colortbl;\red255\green255\blue255;\red46\green174\blue187;\red47\green180\blue29;\red180\green36\blue25;
+}
+\paperw11900\paperh16840\margl1440\margr1440\vieww25400\viewh13280\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\qc
+
+\f0\b\fs48 \cf0 Breif information about LibRocket/Lua on the PC and Zenterio Platform\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural
+
+\b0\fs24 \cf0 \
+
+\b\fs36 Preface
+\b0\fs24 \
+\
+Lua is a powerful, lightweight and high performance scripting language developed back in 1993 by the computer graphics group at the pontifical catholic university of Rio de Janeiro.\
+Due to it\'92s light memory usage and high runtime performance it has gained a lot of traction as an embedded scripting language is various tools and games through the years.\
+\
+libRocket is an graphical layout engine which combines a subset of HTML with a subset of CSS (referred to RML <Rocket Markup Language> and RCSS <Rocket Cascade Style Sheets>)\
+libRocket does not render anything on it\'92s own but instead just layouts and sends the processed data to a implementation specific graphics backend.\
+Due to the simple nature of libRocket it has very limited builtin element types, but relies heavily on RCSS pattern matching to style and layout elements. \
+libRocket itself is written in C++, but has support for both Lua and Python bindings in the main repository. \
+\
+
+\b\fs36 Getting started (quick Lua recap)\
+
+\b0\fs24 \
+Before you get started it\'92s important to grasp the fundamental concepts of Lua (which are not covered in this tutorial), I\'92ll make some comparisons to javascript to high light the similarities and differences.\
+\
+Additionally it\'92s essential to understand the metaprogramming aspect of Lua as the libRocket bindings  relies heavily on this (and unfortunately the libRocket Lua manual is inaccurate; probably because it appears to be mostly a copy of the python manual with some syntactical elements modified)\
+\
+Lua does not have true classes, but it supports encapsulation by various means and heritage through it\'92s metatable, which is somewhat similar to the prototype chain in javascript. \
+In Lua the basic object is a table, the table has a few hidden entries; __index, __newindex etc; these are hooks for it\'92s meta programming. \
+\
+For example; to define a table you simply write \
+\
+
+\i\b ATable = \{\}\
+
+\i0\b0 \
+You can then assign a function to this table using ex \
+\
+
+\i\b ATable.myFunction = function () print(\'93Hello World\'94) end\
+
+\i0\b0 \
+and this function can be executed by calling \
+\
+
+\i\b ATable.myFunction() \
+
+\i0\b0 \
+This is very similar to javascript \
+\
+Now lets say you want to inherit this \'93table\'94 in another table, that\'92s done like this\
+
+\i \
+
+\b AnotherTable = \{\}\
+ATable.__index = ATable\
+setmetatable(AnotherTable, ATable)\
+
+\i0\b0 \
+Once the above call is done; you can now execute \
+  \
+AnotherTable.myFunction() and you\'92ll see \'93Hello World\'94\
+\
+This is the metaprogramming aspect of Lua; and it simply works as following \
+\
+1. AnotherTable.myFunction internally transforms to AnotherTable[\'93myFunction\'94] which will return nil as it\'92s simply not defined\
+2. Because we set ATable to be AnotherTable\'92s metatable the interpreter will in this circumstance internally \'93refer\'94 to ATables metatable hooks\
+3. As we defined __index on ATable (which is the __index meta table hook) it will return ATable as the active object and this do ATable[\'93myFunction\'94]() and successfully execute   \
+\
+This is commonly exploited using a \'93constructor\'94 on the base table\
+\
+
+\i\b BaseTable = \{\}\
+BaseTable.__index = BaseTable\
+\
+BaseTable.Create() \
+	local newInstance = \{\}\
+	setmetatable(newInstance, BaseTable)\
+	\'97 Define any private values on the instance here\
+	\'97 eg. newInstance.myVariable = 0 etc\
+	newInstance.baseValue = 10\
+	return newInstance	\
+end
+\i0\b0 \
+\
+And then used as a \'93factory\'94 object; to spawn instances such as  \
+\
+
+\i\b myInstance = BaseTable.Create() \
+
+\i0\b0 \
+Now typically you want to assign \'93methods\'94 to the base table and this is where things can be a bit confusing (and unfortunately error prone) but is very important \
+\
+Assume you have \
+\
+
+\i\b BaseTable.myMethod = function (input) \
+	return input\
+end\
+
+\i0\b0 \
+You can call this as \
+\
+
+\i\b myInstance.myMethod(1)
+\b0  
+\i0 as demonstrated above; however you have no way to access \'93baseValue\'94 on your instance. As the execution context will be \'93BaseTable\'94 due to the metatable trickery.\
+This has been rectified using some syntactical sugar in the Lua syntax, \
+\
+so to start with you need to define your method such as \
+
+\i\b \
+BaseTable.myMethod = function (self, input) \
+	return self.baseValue + input\
+end\
+
+\i0\b0 \
+And then you can call \
+\
+
+\i\b myInstance.myMethod(myInstance, input) 
+\i0\b0  and refer to your instance as \'93self\'94 (similar to \'93this\'94 in javascript and other languages) however this is not particularly pretty so instead the Lua syntax has support for a \'93:\'94 (colon) accessor which transparently sends the object itself as the first parameter to the target.\
+\
+
+\i\b myInstance:myMethod(1)  \
+
+\i0\b0 \
+So to recap, this is equivalent to doing 
+\i\b myInstance.myMethod(myInstance, 1)
+\i0\b0 \
+\
+Similarly if you define your method such as \
+\
+
+\i\b function BaseTable:myMethod(input)
+\i0\b0  instead of 
+\i\b BaseTable.myMethod = function (self, input) 
+\i0\b0 \
+\
+Lua transparently inserts the \'93self\'94 variable, personally I prefer the explicit case to avoid additional confusion but this is just to demonstrate that the language actually supports it.\
+\
+
+\b\fs36 Getting started (LibRocket - The PC/Reference environment)\
+
+\b0\fs24 \
+When I\'92ve been developing in this environment I\'92ve used the sdl2 application as a host to do PC based development then test the results on the STB, \
+But the problem is that sdl2 does not by default support the Lua bindings so we need to modify the sdl2 sample somewhat, so lets go through the required steps to get the environment up and running.\
+\
+To build the sdl2 version you will need to install a toolchain, lua, libsdl and cmake as a minimum (there might be others but that\'92s left as an exercise to the reader to figure) \
+ \
+Start with checking out 
+\i\b https://github.com/libRocket/libRocket.git 
+\i0\b0 using your preferred git client.\
+\
+Then go into the \'93Build\'94 directory and modify CMakeLists.txt and change the line 
+\f1\i\b\fs22 \CocoaLigature0 option(BUILD_SAMPLES "Build samples" OFF) 
+\f2\i0\b0 to
+\f1\i\b  option(BUILD_SAMPLES "Build samples" ON)
+\f2\i0\b0 \
+
+\f0\fs24 \CocoaLigature1 Additionally enable Lua bindings if disabled 
+\f1\i\b\fs22 \CocoaLigature0 option(BUILD_LUA_BINDINGS "Build Lua bindings" OFF)
+\f2\i0\b0  to 
+\f1\i\b option(BUILD_LUA_BINDINGS "Build Lua bindings" ON)
+\f2\i0\b0 \
+
+\f0\fs24 \CocoaLigature1 Also make sure the library_SAMPLES definition includes the Lua libraries, so it should look something like this \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural
+
+\f1\i\b\fs22 \cf0 \CocoaLigature0 \
+if(NOT BUILD_FRAMEWORK)\
+    set(sample_LIBRARIES\
+        shell\
+        RocketCore\
+        RocketControls\
+        RocketCoreLua\
+        RocketControlsLua\
+        RocketDebugger\
+    )
+\f0\i0\b0\fs24 \CocoaLigature1 \
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural
+\cf0 \
+Then go to libRocket/Samples/basic/sdl2/src/ and modify main.cpp as following\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural
+
+\f3\b\fs22 \cf0 \CocoaLigature0 diff --git a/Samples/basic/sdl2/src/main.cpp b/Samples/basic/sdl2/src/main.cpp
+\f2\b0 \
+
+\f3\b index 0a1e3b6..710755b 100644
+\f2\b0 \
+
+\f3\b --- a/Samples/basic/sdl2/src/main.cpp
+\f2\b0 \
+
+\f3\b +++ b/Samples/basic/sdl2/src/main.cpp
+\f2\b0 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural
+\cf2 @@ -98,6 +98,8 @@\cf0  int main(int argc, char **argv)\
+                return 1;\
+ \
+     Rocket::Core::Lua::Interpreter::Initialise();\
+\cf3 +    Rocket::Controls::Lua::RegisterTypes(Rocket::Core::Lua::Interpreter::GetLuaState());\cf0 \
+\cf3 +\cf0 \
+ /*     \
+     Rocket::Core::FontDatabase::LoadFontFace("Delicious-Bold.otf");\
+        Rocket::Core::FontDatabase::LoadFontFace("Delicious-BoldItalic.otf");\
+\cf2 @@ -108,7 +110,7 @@\cf0  int main(int argc, char **argv)\
+                Rocket::Core::Vector2i(window_width, window_height));\
+ \
+        Rocket::Debugger::Initialise(Context);\
+\cf4 -\cf0 \
+\cf3 +    /*\cf0 \
+        Rocket::Core::ElementDocument *Document = Context->LoadDocument("index.rml");\
+ \
+        if(Document)\
+\cf2 @@ -121,6 +123,8 @@\cf0  int main(int argc, char **argv)\
+        \{\
+                fprintf(stdout, "\\nDocument is NULL");\
+        \}\
+\cf3 +*/\cf0 \
+\cf3 +    Rocket::Core::Lua::Interpreter::LoadFile(Rocket::Core::String("start.lua"));\cf0 \
+ \
+     bool done = false;\
+ \
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural
+
+\f0\fs24 \cf0 \CocoaLigature1 \
+This will enable Lua in the sdl2 sample, once this done traverse back to libRocket/Build  \
+and run 
+\i\b cmake .
+\i0\b0   \
+\
+It will generate the required Makefiles and resolve dependencies; look throughly at the list to make sure that Lua and SDL are found\
+(Sidenote: If building on Mac OS X, make sure you have the i386 versions of the required dependencies as there are Carbon dependencies and Carbon is not available for x64 so it will not build unless this is resolved, macports installs the FAT binary version (both i386 and x64) if you install the packages by postfixing 
+\b +universal
+\b0  to the package name)  \
+\
+Finally build the project and the build directory should contain the sdl2 executable (or on Mac OS X the SDL2.app; you can simply copy SDL2.app/Contents/MacOS/sdl2 to your working directory and launch it via the terminal instead as you will need to keep the file (start.lua) in the same directory as the application which is a bit cumbersome if it remains in the application container.\
+\
+To verify the installation create a simple start.lua file that just contains a single 
+\i\b print(\'93hello\'94) 
+\i0\b0 and start the executable ./sdl2 the console prints \'93hello\'94 the lua integration is successfully working and executing in the librocket context.\
+\
+
+\b\fs36 Basic libRocket usage\
+
+\b0\fs24 \
+libRocket exports the \'93rocket\'94 global which is the only entrance to libRocket you have when start.lua executes, it\'92s important to notice libRocket uses the \'93class\'94 system described above thus \'93:\'94 is used for all method calls if you don\'92t use \'93:\'94 it simply will not work as you expect, so in case of errors that\'92s the first thing to investigate. \
+\
+A basic start.lua \
+\
+looks something like \
+\
+
+\i\b context = rocket.contexts["main"]\
+defaultDocument = contextt:LoadDocument("index.rml") \
+defaultDocument:Show()
+\i0\b0 \
+\
+Once you launch \'93./sdl2\'94 this will load, parse and finally display the RML file named \'93index.rml\'94 once performed the lua interpreter exits and further actions are event driven.\
+\
+On the STB you will have to make a few changes to successfully start (read the known issues document to outline the required changes).\
+\
+The actual command to launch the Rocket environment on the STB is \'93
+\f1\i\b\fs22 \CocoaLigature0 /var/apps/Rocket/bin/bcm7241/RocketApp
+\f2\i0\b0 \'94
+\f0\fs24 \CocoaLigature1 \
+eg. 
+\f2\fs22 \CocoaLigature0 / # /var/apps/Rocket/bin/bcm7241/RocketApp <path to file>
+\f0\fs24 \CocoaLigature1 \
+\
+\
+
+\b\fs36 End notes:\
+
+\b0\fs24 \
+Events on the PC you can use libRockets event system, unfortunately it\'92s not integrated in zenterios build so you have to handle input events via a side channel call \'93onKey\'94, this is of course not an issue once Zenterio has their PC based simulator ready but until then you will have to live with two input systems (or if they adapt to the libRocket integrated handling which of course would be preferable)\
+\
+Further more another difficulty with the current zenterio handling is the fact it does not provide the origin document from which the event originated, which means you will have to expose all documents loaded globally to be able to access and operate on them as a reaction to events, this may not be an issue for a smaller project but can be an issue if you try to write something larger and try to keep a modular design as you are significantly more likely to eventually collide with other global variables named the same way- especially if written by different developers. \
+\
+(See the provided code how my input handling works, even though I didn\'92t fully finish the context routing the basic idea might be obvious even though the limitation is that only the last activated document will trigger input events) \
+\
+The lua Rocket API is outlined here 
+\i\b http://librocket.com/wiki/documentation/LuaManual/APIReference
+\i0\b0  \
+\
+Regarding RML I won\'92t cover it here as the supported elements (attributes on an element object 
+\i\b http://www.librocket.com/wiki/documentation/LuaManual/Elements
+\i0\b0  ) are well documented, \
+Same goes RCSS ( 
+\i\b https://librocket.com/wiki/documentation/RCSS/PropertyIndex
+\i0\b0  ) which lists all supported CSS tags (as well as variants of the listed which are not supported) \
+\
+And to repeat whats been stated several times already, it\'92s important to note that libRocket uses the class hierarchy and expects the self parameter or will silently fail, this can unfortunately be difficult to spot but it\'92s been the most common pitfall in my experience and to make matters worse certain calls will work just fine without being colon addressed (they just don\'92t use the \'93self\'94 variable internally). \
+\
+Finally it\'92s probably worth mentioning the only RML tags libRocket actually has any knowledge of are <img> (display an image) and <handle> (used for mouse operations, primarily drag n drop so it\'92s not interesting for our use case) \
+So the \'93magic\'94 with libRocket is RCSS styling via custom tags, i.e. you define your own tags and use RCSS to style it- so libRocket doesn\'92t have any knowledge of <br> <h1> <div> etc, it\'92s totally up to you to define the tags and set their characteristics using RCSS.\
+\
+Also in the official repository there is currently no support for css transformations, to add to this matter Lua has no builtin \'93timer\'94 source; thus by default transitions can\'92t even be emulated in pure Lua.\
+\
+On the Zenterio platform there is an API to create timers but at the time I wrote this this API was not functioning as expected (See known issues document)\
+\
+This should be enough to get you started and going with the basic environment}
